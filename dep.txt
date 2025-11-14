@@ -1,0 +1,191 @@
+Codebase Modification Plan for Fintech EKS Architecture
+1. 🧱 Microservice Realignment
+Course Microservice	Fintech Equivalent	Action Needed
+product-service	Not needed	Remove or repurpose
+order-service	payment-service	Rename, refactor domain to Transaction, PaymentRequest
+user-service	user-service	Replace Keycloak with Cognito integration
+notification-service	notification-service	Replace Kafka with SQS consumer logic
+gateway-service	Use ALB + Ingress	Remove Spring Cloud Gateway unless needed for internal routing
+reporting-service	Build new	Create scheduled batch job service with SQS trigger
+2. 🔐 Security Refactor
+Current Setup	Target Setup	Action Needed
+Keycloak + OAuth2	Amazon Cognito + JWT	Remove Keycloak, configure Cognito JWT validation in Spring Boot
+Local JWT generation	Cognito-issued JWT	Remove JwtTokenProvider, use Spring Security Resource Server
+Role checks via DB	Role checks via JWT claims	Use cognito:groups claim for @PreAuthorize annotations
+Spring Security Config Example:
+
+yaml
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+3. 📦 Messaging Layer
+Current Setup	Target Setup	Action Needed
+Kafka / RabbitMQ	Amazon SQS + DLQ	Replace Kafka listeners with SQS polling logic using AWS SDK
+No DLQ	DLQ for failed messages	Configure DLQ in SQS and implement retry + idempotency logic
+4. ☁️ Deployment Strategy
+Current Setup	Target Setup	Action Needed
+Docker Compose / Minikube	Amazon EKS + Helm	Convert Docker Compose to Helm charts for each service
+Manual YAMLs	CI/CD + Canary	Integrate GitHub Actions or ArgoCD for automated deployment
+Local PostgreSQL	RDS + Proxy + KMS	Update DB config to use RDS endpoint, IAM auth, and TLS
+5. 📊 Observability
+Current Setup	Target Setup	Action Needed
+Zipkin + Micrometer	AWS X-Ray + CloudWatch	Replace Zipkin with X-Ray SDK; export metrics to CloudWatch
+Basic logs	Structured JSON logs	Use Logback JSON encoder; forward to CloudWatch Logs
+6. 🧪 Testing & Resilience
+Current Setup	Target Setup	Action Needed
+Basic unit tests	Chaos drills + DLQ jobs	Add DLQ reprocessing logic and simulate SQS failures
+Retry logic	Exponential backoff + jitter	Use Resilience4j or RetryTemplate with jittered backoff
+7. 🧾 IAM & Secrets
+Current Setup	Target Setup	Action Needed
+Hardcoded secrets	AWS Secrets Manager + IRSA	Remove secrets from config; use IRSA to fetch secrets securely
+Default IAM roles	Fine-grained IAM policies	Define IAM roles per service with least privilege access
+
+
+To deploy your Spring Boot microservices on AWS EKS, you need to containerize them, configure Kubernetes manifests, and wire up AWS services like Cognito, RDS, and SQS. Below is a complete step-by-step guide.
+
+🚀 Step-by-Step Deployment Guide for AWS EKS
+1. Prepare Your Microservices
+Build Docker images for each microservice (User, Payment, Notification):
+
+dockerfile
+FROM openjdk:17-jdk-slim
+COPY target/payment-service.jar app.jar
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+Push images to Amazon ECR:
+
+bash
+aws ecr create-repository --repository-name payment-service
+docker tag payment-service:latest <your-ecr-url>/payment-service
+docker push <your-ecr-url>/payment-service
+2. Provision EKS Cluster
+Use eksctl:
+
+bash
+eksctl create cluster \
+  --name fintech-cluster \
+  --region ap-south-1 \
+  --nodegroup-name standard-workers \
+  --node-type t3.medium \
+  --nodes 3 \
+  --nodes-min 2 \
+  --nodes-max 4 \
+  --managed
+3. Configure IAM Roles for Service Accounts (IRSA)
+Create IAM roles for each microservice (e.g., sqs:SendMessage, rds:Connect)
+
+Annotate Kubernetes service accounts with IAM roles:
+
+yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payment-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<account-id>:role/payment-role
+4. Create Kubernetes Manifests
+Deployment.yaml for each microservice:
+
+yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      serviceAccountName: payment-sa
+      containers:
+      - name: payment
+        image: <your-ecr-url>/payment-service
+        ports:
+        - containerPort: 8080
+Service.yaml:
+
+yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+spec:
+  selector:
+    app: payment-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
+5. Ingress + ALB Setup
+Install AWS Load Balancer Controller
+
+Annotate Ingress resources:
+
+yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: payment-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /payments
+        pathType: Prefix
+        backend:
+          service:
+            name: payment-service
+            port:
+              number: 80
+6. Connect to RDS
+Use spring.datasource.url with RDS endpoint
+
+Ensure RDS is in a private subnet and security group allows EKS access
+
+7. Wire Up Cognito
+Validate JWT in Spring Boot using:
+
+yaml
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://cognito-idp.ap-south-1.amazonaws.com/<user-pool-id>
+8. Enable Observability
+Add Prometheus annotations to pods
+
+Use Micrometer + CloudWatch + X-Ray SDK
+
+Deploy Grafana dashboards
+
+9. Deploy with Helm (Optional)
+Package each microservice as a Helm chart
+
+Use values.yaml for environment-specific configs
+
+✅ Final Checklist
+[x] Dockerized microservices pushed to ECR
+
+[x] EKS cluster provisioned
+
+[x] IAM roles mapped to service accounts
+
+[x] Kubernetes manifests applied
+
+[x] ALB + Ingress configured
+
+[x] RDS, Cognito, SQS wired
+
+[x] Observability enabled
