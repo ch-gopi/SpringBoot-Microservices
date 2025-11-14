@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: user-service   # or payment-service, notification-service, etc.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_AbCdEf123
+aws:
+  sqs:
+    payments-events-queue-url: https://sqs.ap-south-1.amazonaws.com/<account-id>/payments-events
+#  IAM Role (IRSA)
+#Attach to the Payment service pod in EKS with least‑privilege permissions:
+#
+#  json
+#  {
+#    "Version": "2012-10-17",
+#    "Statement": [
+#      {
+#        "Effect": "Allow",
+#        "Action": ["sqs:SendMessage"],
+#        "Resource": "arn:aws:sqs:ap-south-1:<account-id>:payments-events"
+#      }
+#    ]
+#  }
