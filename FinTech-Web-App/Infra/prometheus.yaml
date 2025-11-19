@@ -1,0 +1,12 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fintech-services
+  namespace: fintech
+spec:
+  selector:
+    matchLabels:
+      tier: backend   # both employee-service and department-service must have this label
+  endpoints:
+    - port: 8080
+      path: /actuator/prometheus
