@@ -1,0 +1,65 @@
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: department-service
+  labels:
+    app: department-service
+spec:
+  replicas: 3   # start with 3 pods, HPA can scale this
+  selector:
+    matchLabels:
+      app: department-service
+  template:
+    metadata:
+      labels:
+        app: department-service
+    spec:
+      serviceAccountName: department-sa   # IRSA-enabled service account for AWS access
+      containers:
+        - name: department-service
+          image: <your-ecr-repo>/department-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: AWS_REGION
+              value: "ap-south-1"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: department-db-secret
+                  key: host
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: department-db-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: department-db-secret
+                  key: password
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
