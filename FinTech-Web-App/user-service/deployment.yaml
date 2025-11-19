@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: employee-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: employee-service
+  template:
+    metadata:
+      labels:
+        app: employee-service
+    spec:
+      serviceAccountName: employee-sa  # IRSA for AWS access
+      containers:
+        - name: employee-service
+          image: <your-ecr-repo>
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AWS_REGION
+              value: "ap-south-1"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: AWS_XRAY_TRACING_NAME
+              value: "employee-service"

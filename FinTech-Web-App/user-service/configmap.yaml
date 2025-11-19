@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: employee-config
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  AWS_REGION: "ap-south-1"
